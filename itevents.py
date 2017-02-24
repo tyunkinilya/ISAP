@@ -5,8 +5,6 @@ import requests
 import re
 import time
 
-basic_url = 'http://it-events.com/events/'
-
 def get_html(url):
 	return requests.get(url).text
 
@@ -14,82 +12,116 @@ def side_box_exist(aside, span_class):
 	return True if aside.find('span', {'class' : span_class}) != None else False
 
 def list_side_boxes(aside):
-	# side_boxes_classes = ['icon_card','icon_date','icon_geo','icon_translation','icon_user','icon_socials','icon_event_group','icon_organizer','icon_sponsor','icon_partner','icon_registered']
-	# side_boxes_existance = [False]*11
-	# for i in range(11):
-	# 	side_boxes_existance[i] = side_box_exist(aside, side_boxes_classes[i])
-	# return side_boxes_existance
-
-	side_boxes_classes = ['icon_card','icon_date','icon_geo','icon_user']
-	side_boxes_existance = [False]*4
-	for i in range(4):
+	side_boxes_classes = ['icon_card','icon_date','icon_geo','icon_user','icon_organizer']
+	side_boxes_existance = [False]*5
+	for i in range(5):
 		side_boxes_existance[i] = side_box_exist(aside, side_boxes_classes[i])
 	return side_boxes_existance
 
 def get_price(aside):
-	return aside.find('div', {'class' : 'box_aside'}).find('p').text[1:-1].replace('\n[?]','')
+	return aside.find('div', {'class' : 'box_aside'}).find('p').text[1:-1].replace('[?]','').replace('\n', '')
 
 def get_dates(aside):
-	start_date = soup.findAll('strong', {'id' : "event_end_date"})[0].text[2:-1]
-	end_date = soup.findAll('strong', {'id' : "event_end_date"})[1].text[2:-1]
-	return [start_date, end_date]
+	start_date = aside.findAll('strong', {'id' : "event_end_date"})[0].text[2:-1]
+	end_date = aside.findAll('strong', {'id' : "event_end_date"})[1].text[2:-1]
+	return {'start' : start_date, 'end' : end_date}
 
 def get_geo(aside):
-	region = soup.findAll('span', {'class' : "region"})[0]
+	region = aside.findAll('span', {'class' : "region"})[0]
 	if region != None:
 		region = region.text[1:-1].replace('\n', '')
 	try:
-		place = soup.findAll('span', {'class' : "region"})[1]
+		place = aside.findAll('span', {'class' : "region"})[1]
 		if place != None:
 			place = place.text[1:-1].replace('Место: ', '')
 	except:
 		place = None
 
-	adress = soup.find('span', {'class' : 'street-adress'})
+	adress = aside.find('span', {'class' : 'street-adress'})
 	if adress != None:
 		adress = adress.text[1:-1]
 
-	return [region, adress, place]
+	return {'region' : region, 'adress' : adress, 'place' : place}
 
 def get_contacts(aside):
-	if soup.find('a', {'href' : re.compile(r'/events/\d+\?contact')}) == None:
-		contacts = soup.find('span', {'class' : 'icon_user'}).parent.nextSibling.nextSibling
+	if aside.find('a', {'href' : re.compile(r'/events/\d+\?contact')}) == None:
+		contacts = aside.find('span', {'class' : 'icon_user'}).parent.nextSibling.nextSibling.findAll(re.compile('dd|dt'))
 	else:
-		contacts = soup.find('span', {'class' : 'icon_user'}).parent.parent.nextSibling.nextSibling
+		contacts = aside.find('span', {'class' : 'icon_user'}).parent.parent.nextSibling.nextSibling.findAll(re.compile('dd|dt'))
 
-	name = re.compile(r'([А-Яа-я]+)').findall(str(contacts))
-	if len(name) == 3:
-		name = name[1]
+	res = {'Имя': '', 'e-mail' : '', 'Телефон' : ''}
+	for i in range(0, len(contacts), 2):
+		res[contacts[i].text.replace('\n', '')] = contacts[i + 1].text.replace('\n', '')
+
+	res['name'] = res.pop('Имя')
+	res['tel_number'] = res.pop('Телефон')
+	return res
+
+def get_organizers(aside):
+	organizers = aside.findAll('div', {'class' : 'box_aside organizer'})
+	res = []
+	for org in organizers:
+		res.append(org.find('span').text.replace('\n', ''))
+	return res
+
+def get_category(soup):
+	return soup.find('span', {'class' : 'category'}).a.text.replace('\n', '')
+
+def get_event_site(soup):
+	if soup.find('span', {'class' : 'fl_right'}).find('a') != None:
+		return soup.find('span', {'class' : 'fl_right'}).find('a').get('href')
 	else:
-		name = None
+		return ''
+def get_anons(soup):
+	content = soup.find('article', {'class' : 'anons'})
+	# return {'anons_html' : str(content), 'anons_text' : re.sub(r'\n+', '\n', content.get_text())}
+	return {'anons_html' : str(content), 'anons_text' : re.sub(r' +|\t+', ' ', re.sub(r'\n+', '\n', content.get_text()))}
 
-	email = contacts.find('a')
-	if email != None:
-		email = email.get('href').replace('mailto:', '')
-
-	tel_number = contacts.find(text=re.compile(r'(\+ *\d{1,3} *\(\d{1,3}\) *(\d{1,3}[- ]*)*)|(\d+)'))
-	if tel_number != None:
-		tel_number = tel_number.replace('\n', '')
-	return [name, email, tel_number]
-
-functions_list = ['get_price(aside)', 'get_dates(aside)', 'get_geo(aside)', 'get_contacts(aside)']
-
-# 8010 - error
-
-for j in range(8010, 8050):
-	soup = BeautifulSoup(get_html(basic_url + str(j)), 'html.parser')
-	aside = soup.find('aside')
-
+def get_info(aside):
+	functions_list = ['price', 'dates', 'geo', 'contacts', 'organizers']
 	side_boxes_existance = list_side_boxes(aside)
-
-	event_info = [None]*4
-
-	for i in range(4):
+	event_info = {'price' : '', 'dates' : '', 'geo' : '', 'contacts' : '', 'organizers' : ''}
+	for i in range(len(functions_list)):
 		if side_boxes_existance[i]:
-			event_info[i] = eval(functions_list[i])
+			event_info[functions_list[i]] = eval('get_' + functions_list[i] + '(aside)')
+	return event_info
 
-	print('\n--------' + str(j) + '--------\n')
-	print(*event_info, sep='\n')
-	print('\n--------' + str(j) + '--------\n')
+def process_url(url):
+	soup = BeautifulSoup(get_html(url), 'html.parser')
+	aside = soup.find('aside')
+	if soup.find('h1', {'class' : 'msgError'}) == None:
+		event = {
+				'link' : url,
+				'category' : get_category(soup), 
+				'site' : get_event_site(soup), 
+				'info' : get_info(aside), 
+				'anons' : get_anons(soup)}
+	else:
+		event = {
+				'link' : url,
+				'category' : '', 
+				'site' : '', 
+				'info' : {'price' : '', 'dates' : '', 'geo' : '', 'contacts' : '', 'organizers' : ''}, 
+				'anons' : {'anons_html' : '', 'anons_text' : ''}}
+	return event
+	
+def write_event(event, path):
+	f = open(path, 'a', encoding =  'utf-8')
+	f.write('--------' + event['link'].replace(r'http://it-events.com/events/', '') + '--------' + '\n')
+	f.write('category' + ' : ' + event['category'] + '\n')
+	f.write('site' + ' : ' + event['site'] + '\n')
+	for key, value in event['info'].items():
+		f.write(str(key) + ':' + str(value) + '\n')
+	f.write('--------ANONS-------' + '\n')
+	f.write(event['anons']['anons_text'] + '\n')
+	# f.write('--------' + event['link'].replace(r'http://it-events.com/events/', '') + '--------' + '\n')
 
-	time.sleep(5)
+basic_url = 'http://it-events.com/events/'
+
+# event_num = 1234
+# write_event(process_url(basic_url + str(event_num)), 'output.txt')
+
+for event_num in range(8400,8450):
+	print(event_num)
+	write_event(process_url(basic_url + str(event_num)), 'output.txt')
+	time.sleep(4)
