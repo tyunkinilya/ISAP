@@ -9,6 +9,7 @@ event = itevents.process_url(basic_url + str(event_num))
 itevents.write_event_txt(event, 'output.txt', 'w')
 # itevents.write_event_json(event, 'output.json', 'w')
 
+
 def find_phrase(phrase, event):
     ph = stemmer.stem_phrase(phrase)
     res = 0

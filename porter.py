@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import re
 
+
 class Porter:
     perfectiveground =  re.compile("((ив|ивши|ившись|ыв|ывши|ывшись)|((?<=[ая])(в|вши|вшись)))$")
     reflexive = re.compile("(с[яь])$")
