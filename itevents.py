@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import requests
 import re
 import time
+import json
 
 def get_html(url):
 	return requests.get(url).text
@@ -75,6 +76,9 @@ def get_event_site(soup):
 def get_anons(soup):
 	content = soup.find('article', {'class' : 'anons'})
 	# return {'anons_html' : str(content), 'anons_text' : re.sub(r'\n+', '\n', content.get_text())}
+	for x in content.findAll('img'):
+		if x.get('src')[0] == '/':
+			x['src'] = 'http://it-events.com' + x.get('src')
 	return {'anons_html' : str(content), 'anons_text' : re.sub(r' +|\t+', ' ', re.sub(r'\n+', '\n', content.get_text()))}
 
 def get_info(aside):
@@ -105,8 +109,8 @@ def process_url(url):
 				'anons' : {'anons_html' : '', 'anons_text' : ''}}
 	return event
 	
-def write_event(event, path):
-	f = open(path, 'a', encoding =  'utf-8')
+def write_event_txt(event, path, attr = 'a'):
+	f = open(path, attr, encoding =  'utf-8')
 	f.write('--------' + event['link'].replace(r'http://it-events.com/events/', '') + '--------' + '\n')
 	f.write('category' + ' : ' + event['category'] + '\n')
 	f.write('site' + ' : ' + event['site'] + '\n')
@@ -116,12 +120,18 @@ def write_event(event, path):
 	f.write(event['anons']['anons_text'] + '\n')
 	# f.write('--------' + event['link'].replace(r'http://it-events.com/events/', '') + '--------' + '\n')
 
+def write_event_json(event, path, attr = 'a'):
+	f = open(path, attr, encoding =  'utf-8')
+	f.write(json.dumps(event))
+
 basic_url = 'http://it-events.com/events/'
 
-# event_num = 1234
-# write_event(process_url(basic_url + str(event_num)), 'output.txt')
+event_num = 8715
+write_event_txt(process_url(basic_url + str(event_num)), 'output.txt', 'w')
+write_event_json(process_url(basic_url + str(event_num)), 'output.json', 'w')
 
-for event_num in range(8400,8450):
-	print(event_num)
-	write_event(process_url(basic_url + str(event_num)), 'output.txt')
-	time.sleep(4)
+# for event_num in range(8750,8751):
+# 	print(event_num)
+# 	write_event_txt(process_url(basic_url + str(event_num)), 'output.txt')
+# 	write_event_json(process_url(basic_url + str(event_num)), 'output.json')
+# 	time.sleep(4)
