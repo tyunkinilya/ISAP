@@ -5,6 +5,7 @@ import requests
 import re
 import time
 import json
+import stemmer
 
 def get_html(url):
 	return requests.get(url).text
@@ -79,7 +80,7 @@ def get_anons(soup):
 	for x in content.findAll('img'):
 		if x.get('src')[0] == '/':
 			x['src'] = 'http://it-events.com' + x.get('src')
-	return {'anons_html' : str(content), 'anons_text' : re.sub(r' +|\t+', ' ', re.sub(r'\n+', '\n', content.get_text()))}
+	return {'anons_html' : str(content), 'anons_text' : re.sub(r' +|\t+', ' ', re.sub(r'\n+', '\n', content.get_text())), 'anons_keywords' : stemmer.stem_text(content.get_text())}
 
 def get_info(aside):
 	functions_list = ['price', 'dates', 'geo', 'contacts', 'organizers']
@@ -106,7 +107,7 @@ def process_url(url):
 				'category' : '', 
 				'site' : '', 
 				'info' : {'price' : '', 'dates' : '', 'geo' : '', 'contacts' : '', 'organizers' : ''}, 
-				'anons' : {'anons_html' : '', 'anons_text' : ''}}
+				'anons' : {'anons_html' : '', 'anons_text' : '', 'anons_keywords' : ''}}
 	return event
 	
 def write_event_txt(event, path, attr = 'a'):
@@ -117,7 +118,7 @@ def write_event_txt(event, path, attr = 'a'):
 	for key, value in event['info'].items():
 		f.write(str(key) + ':' + str(value) + '\n')
 	f.write('--------ANONS-------' + '\n')
-	f.write(event['anons']['anons_text'] + '\n')
+	f.write(event['anons']['anons_keywords'] + '\n')
 	# f.write('--------' + event['link'].replace(r'http://it-events.com/events/', '') + '--------' + '\n')
 
 def write_event_json(event, path, attr = 'a'):
@@ -130,12 +131,12 @@ def event_to_json(event):
 if __name__ == '__main__':
 	basic_url = 'http://it-events.com/events/'
 
-	event_num = 8715
-	write_event_txt(process_url(basic_url + str(event_num)), 'output.txt', 'w')
-	write_event_json(process_url(basic_url + str(event_num)), 'output.json', 'w')
+	# event_num = 8715
+	# write_event_txt(process_url(basic_url + str(event_num)), 'output.txt', 'w')
+	# write_event_json(process_url(basic_url + str(event_num)), 'output.json', 'w')
 
-	# for event_num in range(8750,8751):
-	# 	print(event_num)
-	# 	write_event_txt(process_url(basic_url + str(event_num)), 'output.txt')
-	# 	write_event_json(process_url(basic_url + str(event_num)), 'output.json')
-	# 	time.sleep(4)
+	for event_num in range(6500,6550):
+		print(event_num)
+		write_event_txt(process_url(basic_url + str(event_num)), 'output.txt')
+		# write_event_json(process_url(basic_url + str(event_num)), 'output.json')
+		time.sleep(4)
