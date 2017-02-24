@@ -124,14 +124,18 @@ def write_event_json(event, path, attr = 'a'):
 	f = open(path, attr, encoding =  'utf-8')
 	f.write(json.dumps(event))
 
-basic_url = 'http://it-events.com/events/'
+def event_to_json(event):
+	return json.dumps(event)
 
-event_num = 8715
-write_event_txt(process_url(basic_url + str(event_num)), 'output.txt', 'w')
-write_event_json(process_url(basic_url + str(event_num)), 'output.json', 'w')
+if __name__ == '__main__':
+	basic_url = 'http://it-events.com/events/'
 
-# for event_num in range(8750,8751):
-# 	print(event_num)
-# 	write_event_txt(process_url(basic_url + str(event_num)), 'output.txt')
-# 	write_event_json(process_url(basic_url + str(event_num)), 'output.json')
-# 	time.sleep(4)
+	event_num = 8715
+	write_event_txt(process_url(basic_url + str(event_num)), 'output.txt', 'w')
+	write_event_json(process_url(basic_url + str(event_num)), 'output.json', 'w')
+
+	# for event_num in range(8750,8751):
+	# 	print(event_num)
+	# 	write_event_txt(process_url(basic_url + str(event_num)), 'output.txt')
+	# 	write_event_json(process_url(basic_url + str(event_num)), 'output.json')
+	# 	time.sleep(4)
