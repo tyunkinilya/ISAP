@@ -76,7 +76,6 @@ def get_event_site(soup):
 		return ''
 def get_anons(soup):
 	content = soup.find('article', {'class' : 'anons'})
-	# return {'anons_html' : str(content), 'anons_text' : re.sub(r'\n+', '\n', content.get_text())}
 	for x in content.findAll('img'):
 		if x.get('src')[0] == '/':
 			x['src'] = 'http://it-events.com' + x.get('src')
@@ -110,7 +109,7 @@ def process_url(url):
 				'anons' : {'anons_html' : '', 'anons_text' : '', 'anons_keywords' : ''}}
 	return event
 	
-def write_event_txt(event, path, attr = 'a'):
+def write_event_txt(event, path, attr = 'a', an = 'text'):
 	f = open(path, attr, encoding =  'utf-8')
 	f.write('--------' + event['link'].replace(r'http://it-events.com/events/', '') + '--------' + '\n')
 	f.write('category' + ' : ' + event['category'] + '\n')
@@ -118,8 +117,7 @@ def write_event_txt(event, path, attr = 'a'):
 	for key, value in event['info'].items():
 		f.write(str(key) + ':' + str(value) + '\n')
 	f.write('--------ANONS-------' + '\n')
-	f.write(event['anons']['anons_keywords'] + '\n')
-	# f.write('--------' + event['link'].replace(r'http://it-events.com/events/', '') + '--------' + '\n')
+	f.write(event['anons']['anons_' + an] + '\n')
 
 def write_event_json(event, path, attr = 'a'):
 	f = open(path, attr, encoding =  'utf-8')
