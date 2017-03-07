@@ -8,10 +8,12 @@ core
   * псевдоабстрактный клас BaseParser
 
 Created by pavel on 24.02.17 18:02
+Edited by Ilya on 25.02.17 2:10
 """
 import datetime
+import requests
 
-__author__ = 'pavel'
+__authors__ = ['pavel', 'ilya']
 
 
 DEFAULT_SEARCH_DEPTH = datetime.timedelta(hours=2)
