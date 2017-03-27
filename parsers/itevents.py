@@ -8,8 +8,10 @@ Created by pavel on 24.02.17 18:13
 from core import BaseParser
 
 from bs4 import BeautifulSoup
-from sqlalchemy import MetaData, Table, Column, Integer, String, create_engine
-from sqlalchemy.orm import sessionmaker, mapper
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from db_config import metadata, events_table, itevent
 
 import sys
 import re
@@ -17,59 +19,11 @@ import time
 import json
 import stemmer
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 import configparser
 
 __author__ = 'ilya'
-
-
-'''
-Class and table for db
-'''
-metadata = MetaData()
-events_table = Table('events', metadata,
-    Column('event_id', Integer, primary_key=True, autoincrement=True),
-    Column('link', String),
-    Column('category', String),
-    Column('site', String),
-    Column('price', String),
-    Column('start_date', String),
-    Column('end_date', String),
-    Column('region', String),
-    Column('adress', String),
-    Column('place', String),
-    Column('name', String),
-    Column('tel_number', String),
-    Column('email', String),
-    Column('organizers', String),
-    Column('anons_text', String),
-    Column('anons_keywords', String),
-    Column('class_IS', Integer)
-)
-
-class itevent(object):
-    def __init__(self, link, category, site, price, start_date, end_date, region, adress, place, name, tel_number, email, organizers, anons_text, anons_keywords, class_IS):
-        self.link = link
-        self.category = category
-        self.site = site
-        self.price = price
-        self.start_date = start_date
-        self.end_date = end_date
-        self.region = region
-        self.adress = adress
-        self.place = place
-        self.name = name
-        self.tel_number = tel_number
-        self.email = email
-        self.organizers = organizers
-        self.anons_text = anons_text
-        self.anons_keywords = anons_keywords
-        self.class_IS = class_IS
-
-    def __repr__(self):
-        return "<User('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')>" % (self.event_id, self.link, self.category, self.site, self.price, self.start_date, self.end_date, self.region, self.adress, self.place, self.name, self.tel_number, self.email, self.organizers, self.anons_text, self.anons_keywords, self.class_IS)
-
-mapper(itevent, events_table)
 
 '''
 Main class
@@ -87,7 +41,7 @@ class ItEventsParser(BaseParser):
             'anons_text' : '',
             'anons_keywords' : ''}
 
-    def search(self, search_string = '', limit = 20, datetime_bounds = (None, None)):
+    def search(self, search_string = '', limit = 50, datetime_bounds = (None, None)):
         '''
         Возвращает список ссылок в формате 'events/[0-9]+'
         '''
@@ -100,6 +54,7 @@ class ItEventsParser(BaseParser):
             limit = len(vevents)
         for i in range(limit):
             events.append(vevents[i].find('h3').find('a').get('href')[1:])
+        # print(events)
         return events
 
     def __check_connection(self, url):
@@ -216,7 +171,9 @@ class ItEventsParser(BaseParser):
             
     def __get_anons(self, soup):
         content = soup.find('article', {'class' : 'anons'})
-        return {'anons_text' : re.sub(r' +|\t+', ' ', re.sub(r'\n+', '\n', content.get_text())).strip(), 'anons_keywords' : stemmer.stem_text(content.get_text())}
+        text = re.sub(r' +|\t+', ' ', re.sub(r'\n+', '\n', content.get_text())).strip()
+        # return {'anons_text' : text, 'anons_keywords' : stemmer.stem_text(content.get_text())}
+        return {'anons_text' : text, 'anons_keywords' : text}
 
     def __get_info(self, aside):
         event_info = {'price' : '', 'dates' : '', 'geo' : {'region' : '', 'adress' : '', 'place' : ''}, 'contacts' : {'name': '', 'e-mail' : '', 'tel_number' : ''}, 'organizers' : ''}
@@ -266,10 +223,39 @@ class ItEventsParser(BaseParser):
         metadata.create_all(db)
         Session = sessionmaker(bind = db)
         session = Session()
-        n = len(events)
+        
+
+        ev_list = []
+        anons_list = []
+        concurrency = len(events)
+        upload = self.get_one
+        queryset = [self.root_path + v for v in events]
+        n = len(queryset)
+        i = 0
+        with ThreadPoolExecutor(concurrency) as executor:
+            for x in executor.map(upload, queryset):
+                ev_list.append(x)
+                anons_list.append(x['anons_keywords'])
+                i += 1
+                sys.stdout.write('\rGetting events: {:.2%}'.format(i / n))
+                sys.stdout.flush()
+
+        print('\nMystem starts working...')
+        st = time.clock()
+
+        keywords_list = stemmer.stem_texts(anons_list)
+
+        et = time.clock()
+        print('Mystem\'s work is done in {} seconds...'.format(et - st))
+
+        for i in range(len(anons_list)):
+            ev_list[i]['anons_keywords'] = keywords_list[i]
+
         new_ev = 0
+        i = 0
+        n = len(ev_list)
         for i in range(n):
-            ev = self.get_one(self.root_path + events[i])
+            ev = ev_list[i]
             if ev != self.empty_event:
                 event_in_db = session.execute(events_table.select().where(events_table.c.link == ev['link'])).first()
                 if event_in_db == None:
@@ -282,6 +268,7 @@ class ItEventsParser(BaseParser):
         session.commit()
         return True
 
+
     def check_updates(self):
         config = configparser.ConfigParser()
         config.read('config.cfg')
@@ -289,13 +276,26 @@ class ItEventsParser(BaseParser):
         check_step = int(config.get('itevents', 'step'))
         new_max = last_event_id
         buff = []
+
+        ev_list = []
+        concurrency = 50
+        upload = self.__check_event_exist
+        queryset = [self.root_path + 'events/' + str(i) for i in range(last_event_id + 1, last_event_id + check_step + 2)]
+        n = len(queryset)
+        i = 0
+        with ThreadPoolExecutor(concurrency) as executor:
+            for x in executor.map(upload, queryset):
+                ev_list.append(x)
+                i += 1
+                sys.stdout.write('\rChecking for updates: {:.2%}'.format(i / n))
+                sys.stdout.flush()
+        print()
+
         for i in range(last_event_id + 1, last_event_id + check_step + 2):
-            if self.__check_event_exist(self.root_path + 'events/' + str(i)):
+            if ev_list[i - last_event_id - 1]:
                 buff.append('events/' + str(i))
                 new_max = i
-            sys.stdout.write('\rChecking for updates: {:.2%}'.format((i - last_event_id - 1) / check_step))
-            sys.stdout.flush()
-        print()
+
         if buff:
             self.add_to_db(buff)
             config.set('itevents', 'last_event_id', str(new_max))
@@ -305,7 +305,6 @@ class ItEventsParser(BaseParser):
         else:
             print('No new events')
         return True
-
 
     def write_event_txt(self, event, path = 'output.txt', attr = 'a', an = 'text'):
         f = open(path, attr, encoding =  'utf-8')
@@ -327,4 +326,7 @@ class ItEventsParser(BaseParser):
 
         
 if __name__ == '__main__':
+    st = time.clock()
     xxx = ItEventsParser().check_updates()
+    dt = time.clock() - st
+    print('\nTotal work time {} seconds.'.format(dt))
